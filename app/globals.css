@@ -1,0 +1,136 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 260 15% 5%;
+    --foreground: 210 40% 98%;
+
+    --card: 260 15% 8%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 260 15% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 326 100% 58%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 187 100% 47%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 260 15% 12%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 310 100% 41%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 100% 50%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 260 15% 15%;
+    --input: 260 15% 15%;
+    --ring: 326 100% 58%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-cyber-dark text-foreground;
+    background-image: radial-gradient(circle at 50% 50%, rgba(5, 217, 232, 0.05) 0%, transparent 80%),
+      linear-gradient(to bottom, rgba(13, 2, 33, 0.9), rgba(0, 0, 0, 1));
+  }
+}
+
+@layer components {
+  .cyber-border {
+    @apply relative border-2 border-neon-blue;
+    box-shadow: 0 0 10px theme("colors.neon.blue"), inset 0 0 5px theme("colors.neon.blue");
+  }
+
+  .cyber-border-pink {
+    @apply relative border-2 border-neon-pink;
+    box-shadow: 0 0 10px theme("colors.neon.pink"), inset 0 0 5px theme("colors.neon.pink");
+  }
+
+  .cyber-text {
+    @apply font-bold tracking-wider;
+    text-shadow: 0 0 5px currentColor, 0 0 10px currentColor;
+  }
+
+  .cyber-grid {
+    background-image: linear-gradient(rgba(5, 217, 232, 0.1) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(5, 217, 232, 0.1) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+
+  .cyber-button {
+    @apply relative overflow-hidden border-2 border-neon-blue bg-cyber-dark px-6 py-2 font-bold uppercase tracking-wider text-neon-blue transition-all duration-300;
+    box-shadow: 0 0 10px theme("colors.neon.blue"), inset 0 0 5px theme("colors.neon.blue");
+  }
+
+  .cyber-button:hover {
+    @apply bg-neon-blue text-cyber-dark;
+    box-shadow: 0 0 20px theme("colors.neon.blue");
+  }
+
+  .cyber-button::before {
+    content: "";
+    @apply absolute inset-0 z-0 bg-neon-blue opacity-0 transition-opacity duration-300;
+  }
+
+  .cyber-button:hover::before {
+    @apply opacity-20;
+  }
+
+  .cyber-button::after {
+    content: "";
+    @apply absolute left-0 top-0 h-full w-0 bg-neon-blue opacity-30 transition-all duration-300;
+    transform: skewX(-20deg);
+  }
+
+  .cyber-button:hover::after {
+    @apply w-[120%];
+  }
+
+  /* Custom Scrollbar */
+  .cyber-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .cyber-scrollbar::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
+    box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--primary);
+  }
+
+  .cyber-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--primary);
+    border-radius: 2px;
+    box-shadow: 0 0 5px var(--primary);
+    border: 1px solid var(--secondary);
+  }
+
+  .cyber-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary);
+    box-shadow: 0 0 8px var(--secondary);
+  }
+
+  .cyber-scrollbar::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Scrollbar for Firefox */
+  .cyber-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary) rgba(0, 0, 0, 0.2);
+  }
+}
+
