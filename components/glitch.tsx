@@ -62,4 +62,3 @@ const Glitch = forwardRef<HTMLDivElement, GlitchProps>(({ className, children, s
 Glitch.displayName = "Glitch"
 
 export default Glitch
-

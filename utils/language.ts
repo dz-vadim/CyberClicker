@@ -114,7 +114,7 @@ export const translations: Record<Language, Translations> = {
     autoSave: "Автозбереження",
     lastSaved: "Останнє збереження",
     playerName: "Ім'я гравця",
-    unlockedEffects: "Розблоковані ефекти",
+    unlockedEffects: "Розблок��вані ефекти",
     language: "Мова",
   },
 }
@@ -123,4 +123,3 @@ export const translations: Record<Language, Translations> = {
 export function getTranslation(key: keyof Translations, language: Language): string {
   return translations[language][key]
 }
-

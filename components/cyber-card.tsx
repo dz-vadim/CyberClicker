@@ -65,4 +65,3 @@ const CyberCard = forwardRef<HTMLDivElement, CyberCardProps>(
 CyberCard.displayName = "CyberCard"
 
 export default CyberCard
-

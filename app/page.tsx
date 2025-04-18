@@ -4,34 +4,50 @@ import type React from "react"
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Clock, TrendingUp, Cpu, Layers, Repeat, Sparkles, Target, Coins, Gauge, Rocket, Zap } from "lucide-react"
+import {
+  Clock,
+  TrendingUp,
+  Cpu,
+  Layers,
+  Repeat,
+  Sparkles,
+  Target,
+  Coins,
+  Gauge,
+  Rocket,
+  Zap,
+  Shield,
+} from "lucide-react"
 import { useTheme } from "@/components/theme-provider"
 import AchievementNotification from "@/components/achievement-notification"
 import type { Prize } from "@/components/fortune-wheel"
+import FortuneWheel from "@/components/fortune-wheel"
 import type { CaseReward } from "@/components/case-system"
 import { saveGame, loadGame, resetGame, saveLeaderboardEntry } from "@/utils/save-system"
 import { calculateRobocoinsGain, calculateBonusMultiplier } from "@/utils/prestige-system"
-import { type AntiEffect, applyRandomAntiEffect } from "@/utils/anti-effects"
+import { type AntiEffect, applyRandomAntiEffect, antiEffects } from "@/utils/anti-effects"
 import type { Language } from "@/utils/language"
 import MobileInterface from "@/components/mobile-interface"
 import DesktopInterface from "@/components/desktop-interface"
 import type { UpgradeId, SkinId, TabId, UpgradeCategory } from "@/types/game-types"
 import { Settings } from "lucide-react"
 import MusicPlayer from "@/components/music-player"
+import AdminPanel from "@/components/admin-panel"
+import CustomThemeCreator from "@/components/custom-theme-creator"
 
 // Define the unlock requirements for advanced and special upgrades
 const ADVANCED_REQUIREMENTS = {
-  doubleValue: 1,
-  autoClicker: 1,
-  criticalClick: 1,
+  doubleValue: 15,
+  autoClicker: 10,
+  criticalClick: 5,
   passiveIncome: 1,
 }
 
 const SPECIAL_REQUIREMENTS = {
-  clickMultiplier: 1,
-  autoClickerSpeed: 1,
-  clickCombo: 1,
-  offlineEarnings: 1,
+  clickMultiplier: 10,
+  autoClickerSpeed: 8,
+  clickCombo: 5,
+  offlineEarnings: 3,
 }
 
 export default function MoneyClicker() {
@@ -40,8 +56,8 @@ export default function MoneyClicker() {
   const [clickCount, setClickCount] = useState(0)
   const [clickPosition, setClickPosition] = useState({ x: 0, y: 0 })
   const [showEffect, setShowEffect] = useState(false)
-  // Update the initial money per click to make early game easier
-  const [moneyPerClick, setMoneyPerClick] = useState(500)
+  // Начальное значение клика теперь 1 вместо 500
+  const [moneyPerClick, setMoneyPerClick] = useState(1)
   const [critText, setCritText] = useState("")
   const [showCrit, setShowCrit] = useState(false)
   const [activeTab, setActiveTab] = useState<TabId>("upgrades")
@@ -83,12 +99,43 @@ export default function MoneyClicker() {
   const [musicEnabled, setMusicEnabled] = useState(false)
   // Add state for unlocked cases
   const [unlockedCases, setUnlockedCases] = useState<string[]>(["basic"])
+  // Счетчики открытых кейсов
+  const [casesOpened, setCasesOpened] = useState<Record<string, number>>({
+    basic: 0,
+    premium: 0,
+    elite: 0,
+    legendary: 0,
+  })
   // Add state for fortune wheel modal
   const [showFortuneWheel, setShowFortuneWheel] = useState(false)
   // Add state for interface type
   const [useDesktopInterface, setUseDesktopInterface] = useState(false)
   // Add state for desktop interface unlocked
   const [desktopInterfaceUnlocked, setDesktopInterfaceUnlocked] = useState(false)
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
+  // Защита от антибонусов
+  const [antiEffectProtection, setAntiEffectProtection] = useState(false)
+  const [antiEffectProtectionTimeLeft, setAntiEffectProtectionTimeLeft] = useState(0)
+  // Блокировка кнопки клика
+  const [clickButtonBlocked, setClickButtonBlocked] = useState(false)
+  // Создание собственной темы
+  const [showCustomThemeCreator, setShowCustomThemeCreator] = useState(false)
+  const [customThemes, setCustomThemes] = useState<
+    Record<
+      string,
+      {
+        name: string
+        colors: {
+          primary: string
+          secondary: string
+          accent: string
+          background: string
+        }
+      }
+    >
+  >({})
+  // Флаг для отслеживания действий пользователя, которые должны сбросить комбо
+  const [userPerformedOtherAction, setUserPerformedOtherAction] = useState(false)
 
   // Update the upgrade costs to be more balanced
   const [upgrades, setUpgrades] = useState<
@@ -110,14 +157,14 @@ export default function MoneyClicker() {
     >
   >({
     doubleValue: {
-      name: "Double Value",
-      description: "Double your credits per click",
+      name: "Click Value",
+      description: "Increase your credits per click by 1",
       icon: <TrendingUp className="h-5 w-5" />,
       level: 0,
-      baseCost: 5000, // Reduced from 100000
+      baseCost: 10, // Снижена с 5000 до 10
       costMultiplier: 1.5, // Lower multiplier for smoother progression
       owned: false,
-      effect: 2,
+      effect: 1, // Changed from 2 to 1 - adds 1 to multiplier instead of doubling
       effectMultiplier: 1.5,
       category: "basic",
       unlockCost: 0,
@@ -127,7 +174,7 @@ export default function MoneyClicker() {
       description: "Automatically clicks once per second",
       icon: <Clock className="h-5 w-5" />,
       level: 0,
-      baseCost: 10000, // Reduced from 250000
+      baseCost: 50, // Снижена с 10000 до 50
       costMultiplier: 1.6,
       owned: false,
       effect: 1,
@@ -140,7 +187,7 @@ export default function MoneyClicker() {
       description: "Chance to get 5x credits on click",
       icon: <Sparkles className="h-5 w-5" />,
       level: 0,
-      baseCost: 25000, // Reduced from 500000
+      baseCost: 100, // Снижена с 25000 до 100
       costMultiplier: 1.7,
       owned: false,
       effect: 0.05, // 5% chance per level
@@ -153,10 +200,10 @@ export default function MoneyClicker() {
       description: "Earn credits over time without clicking",
       icon: <Repeat className="h-5 w-5" />,
       level: 0,
-      baseCost: 50000, // Reduced from 1000000
+      baseCost: 200, // Снижена с 50000 до 200
       costMultiplier: 1.8,
       owned: false,
-      effect: 100, // Increased from 50
+      effect: 0.5, // Снижена с 100 до 0.5
       effectMultiplier: 1.3,
       category: "basic",
       unlockCost: 0,
@@ -166,78 +213,78 @@ export default function MoneyClicker() {
       description: "Multiply your click value",
       icon: <Layers className="h-5 w-5" />,
       level: 0,
-      baseCost: 100000, // Reduced from 5000000
+      baseCost: 100000, // Оставляем оригинальную цену
       costMultiplier: 1.9,
       owned: false,
       effect: 1.5, // 1.5x multiplier per level
       effectMultiplier: 1.1,
       category: "advanced",
-      unlockCost: 200000, // Reduced threshold
+      unlockCost: 200000, // Оставляем оригинальную цену
     },
     autoClickerSpeed: {
       name: "Auto Speed",
       description: "Increase auto hack speed",
       icon: <Cpu className="h-5 w-5" />,
       level: 0,
-      baseCost: 250000, // Reduced from 10000000
+      baseCost: 250000, // Оставляем оригинальную цену
       costMultiplier: 2.0,
       owned: false,
       effect: 1, // +1 click per second per level
       effectMultiplier: 1.2,
       category: "advanced",
-      unlockCost: 200000, // Reduced threshold
+      unlockCost: 200000, // Оставляем оригинальную цену
     },
     clickCombo: {
       name: "Click Combo",
       description: "Consecutive clicks increase value",
       icon: <Gauge className="h-5 w-5" />,
       level: 0,
-      baseCost: 500000, // Reduced from 50000000
+      baseCost: 500000, // Оставляем оригинальную цену
       costMultiplier: 2.1,
       owned: false,
       effect: 0.1, // 10% bonus per combo
       effectMultiplier: 1.1,
       category: "advanced",
-      unlockCost: 200000, // Reduced threshold
+      unlockCost: 200000, // Оставляем оригинальную цену
     },
     offlineEarnings: {
       name: "Offline Earnings",
       description: "Earn credits while away",
       icon: <Coins className="h-5 w-5" />,
       level: 0,
-      baseCost: 1000000, // Reduced from 100000000
+      baseCost: 1000000, // Оставляем оригинальную цену
       costMultiplier: 2.2,
       owned: false,
       effect: 0.1, // 10% of normal earnings per level
       effectMultiplier: 1.2,
       category: "advanced",
-      unlockCost: 200000, // Reduced threshold
+      unlockCost: 200000, // Оставляем оригинальную цену
     },
     luckyClicks: {
       name: "Lucky Clicks",
       description: "Random chance for bonus credits",
       icon: <Target className="h-5 w-5" />,
       level: 0,
-      baseCost: 2500000, // Reduced from 500000000
+      baseCost: 2500000, // Оставляем оригинальную цену
       costMultiplier: 2.3,
       owned: false,
       effect: 0.02, // 2% chance per level
       effectMultiplier: 1.3,
       category: "special",
-      unlockCost: 5000000, // Reduced threshold
+      unlockCost: 5000000, // Оставляем оригинальную цену
     },
     megaClick: {
       name: "Mega Click",
       description: "Special ability: massive click value",
       icon: <Rocket className="h-5 w-5" />,
       level: 0,
-      baseCost: 5000000, // Reduced from 1000000000
+      baseCost: 5000000, // Оставляем оригинальную цену
       costMultiplier: 2.5,
       owned: false,
       effect: 10, // 10x multiplier per level
       effectMultiplier: 1.5,
       category: "special",
-      unlockCost: 5000000, // Reduced threshold
+      unlockCost: 5000000, // Оставляем оригинальную цену
     },
   })
 
@@ -276,7 +323,7 @@ export default function MoneyClicker() {
     vaporwave: {
       name: "Vaporwave",
       description: "Retro aesthetics from digital dreams",
-      cost: 5000,
+      cost: 100, // Снижена с 5000 до 100
       owned: false,
       unlockRequirement: "cyberpunk",
       colors: {
@@ -289,7 +336,7 @@ export default function MoneyClicker() {
     retro: {
       name: "Retro",
       description: "8-bit nostalgia from the arcade era",
-      cost: 15000,
+      cost: 250, // Снижена с 15000 до 250
       owned: false,
       unlockRequirement: "vaporwave",
       colors: {
@@ -302,7 +349,7 @@ export default function MoneyClicker() {
     matrix: {
       name: "Matrix",
       description: "Enter the digital realm of code",
-      cost: 30000,
+      cost: 500, // Снижена с 30000 до 500
       owned: false,
       unlockRequirement: "retro",
       colors: {
@@ -315,7 +362,7 @@ export default function MoneyClicker() {
     neon: {
       name: "Neon City",
       description: "Bright lights of the metropolis",
-      cost: 60000,
+      cost: 1000, // Снижена с 60000 до 1000
       owned: false,
       unlockRequirement: "matrix",
       colors: {
@@ -328,7 +375,7 @@ export default function MoneyClicker() {
     synthwave: {
       name: "Synthwave",
       description: "Retro-futuristic sunset vibes",
-      cost: 120000,
+      cost: 2000, // Снижена с 120000 до 2000
       owned: false,
       unlockRequirement: "neon",
       colors: {
@@ -341,7 +388,7 @@ export default function MoneyClicker() {
     outrun: {
       name: "Outrun",
       description: "Fast cars and neon grids",
-      cost: 250000,
+      cost: 4000, // Снижена с 250000 до 4000
       owned: false,
       unlockRequirement: "synthwave",
       colors: {
@@ -354,7 +401,7 @@ export default function MoneyClicker() {
     holographic: {
       name: "Holographic",
       description: "Shimmering iridescent interface",
-      cost: 500000,
+      cost: 8000, // Снижена с 500000 до 8000
       owned: false,
       unlockRequirement: "outrun",
       colors: {
@@ -367,7 +414,7 @@ export default function MoneyClicker() {
     glitch: {
       name: "Glitch",
       description: "Corrupted data aesthetic",
-      cost: 1000000,
+      cost: 15000, // Снижена с 1000000 до 15000
       owned: false,
       unlockRequirement: "holographic",
       colors: {
@@ -380,7 +427,7 @@ export default function MoneyClicker() {
     quantum: {
       name: "Quantum",
       description: "Beyond reality interface",
-      cost: 2000000,
+      cost: 30000, // Снижена с 2000000 до 30000
       owned: false,
       unlockRequirement: "glitch",
       colors: {
@@ -394,7 +441,7 @@ export default function MoneyClicker() {
     cosmic: {
       name: "Cosmic",
       description: "Explore the depths of the universe",
-      cost: 5000000,
+      cost: 60000, // Снижена с 5000000 до 60000
       owned: false,
       unlockRequirement: "quantum",
       colors: {
@@ -407,7 +454,7 @@ export default function MoneyClicker() {
     binary: {
       name: "Binary",
       description: "Pure digital existence",
-      cost: 10000000,
+      cost: 120000, // Снижена с 10000000 до 120000
       owned: false,
       unlockRequirement: "cosmic",
       colors: {
@@ -420,7 +467,7 @@ export default function MoneyClicker() {
     hyperspace: {
       name: "Hyperspace",
       description: "Beyond the limits of reality",
-      cost: 25000000,
+      cost: 250000, // Снижена с 25000000 до 250000
       owned: false,
       unlockRequirement: "binary",
       colors: {
@@ -433,7 +480,7 @@ export default function MoneyClicker() {
     digital: {
       name: "Digital Void",
       description: "The space between data",
-      cost: 50000000,
+      cost: 500000, // Снижена с 50000000 до 500000
       owned: false,
       unlockRequirement: "hyperspace",
       colors: {
@@ -446,7 +493,7 @@ export default function MoneyClicker() {
     ethereal: {
       name: "Ethereal",
       description: "Transcend physical limitations",
-      cost: 100000000,
+      cost: 1000000, // Снижена с 100000000 до 1000000
       owned: false,
       unlockRequirement: "digital",
       colors: {
@@ -533,6 +580,11 @@ export default function MoneyClicker() {
           setUnlockedCases(savedGame.unlockedCases)
         }
 
+        // Set cases opened count
+        if (savedGame.casesOpened) {
+          setCasesOpened(savedGame.casesOpened)
+        }
+
         // Set desktop interface preference
         if (savedGame.useDesktopInterface !== undefined) {
           setUseDesktopInterface(savedGame.useDesktopInterface)
@@ -541,6 +593,11 @@ export default function MoneyClicker() {
         // Set desktop interface unlock status
         if (savedGame.desktopInterfaceUnlocked !== undefined) {
           setDesktopInterfaceUnlocked(savedGame.desktopInterfaceUnlocked)
+        }
+
+        // Set custom themes
+        if (savedGame.customThemes) {
+          setCustomThemes(savedGame.customThemes)
         }
 
         // Set upgrades
@@ -673,9 +730,11 @@ export default function MoneyClicker() {
       activeAntiEffects,
       language,
       unlockedCases,
+      casesOpened,
       musicEnabled,
       useDesktopInterface,
       desktopInterfaceUnlocked,
+      customThemes,
     }
 
     saveGame(gameState)
@@ -701,9 +760,11 @@ export default function MoneyClicker() {
     activeAntiEffects,
     language,
     unlockedCases,
+    casesOpened,
     musicEnabled,
     useDesktopInterface,
     desktopInterfaceUnlocked,
+    customThemes,
   ])
 
   // Reset game
@@ -714,44 +775,78 @@ export default function MoneyClicker() {
     }
   }
 
+  const updateGameState = (newState: any) => {
+    // Обновляем все состояния из админ-панели
+    setMoney(newState.money)
+    setTotalEarned(newState.totalEarned)
+    setClickCount(newState.clickCount)
+    setMoneyPerClick(newState.moneyPerClick)
+    setPlayerName(newState.playerName)
+    setRobocoins(newState.robocoins)
+    setTotalRobocoins(newState.totalRobocoins)
+    setPrestigeCount(newState.prestigeCount)
+    setLanguage(newState.language)
+    setMusicEnabled(newState.musicEnabled)
+    setUseDesktopInterface(newState.useDesktopInterface)
+    setDesktopInterfaceUnlocked(newState.desktopInterfaceUnlocked)
+    setUpgrades(newState.upgrades)
+    setSkins(newState.skins)
+    setActiveSkin(newState.activeSkin)
+    setUnlockedCases(newState.unlockedCases)
+    setCasesOpened(newState.casesOpened || { basic: 0, premium: 0, elite: 0, legendary: 0 })
+    setClickEffects(newState.clickEffects || [])
+    setVisualEffects(newState.visualEffects || [])
+    setBonusEffects(newState.bonusEffects || [])
+    setSpecialEffects(newState.specialEffects || [])
+    setCustomThemes(newState.customThemes || {})
+
+    // Сохраняем изменения
+    saveGameState()
+  }
+
   // Auto-clicker effect
   useEffect(() => {
     let interval: NodeJS.Timeout
 
     if (upgrades.autoClicker.level > 0) {
-      // Calculate clicks per second with bonuses
-      let clicksPerSecond =
-        upgrades.autoClicker.level +
-        (upgrades.autoClickerSpeed.level > 0 ? upgrades.autoClickerSpeed.level * upgrades.autoClickerSpeed.effect : 0)
+      // Check if auto-clicker is blocked by anti-effect
+      const autoClickerBlocked = activeAntiEffects.some((e) => e.id === "auto-hack-block")
 
-      // Apply special effects if any
-      if (specialEffects.includes("elite-5")) {
-        clicksPerSecond *= 1.2 // 20% faster from Time Warp
-      }
+      if (!autoClickerBlocked) {
+        // Calculate clicks per second with bonuses
+        let clicksPerSecond =
+          upgrades.autoClicker.level +
+          (upgrades.autoClickerSpeed.level > 0 ? upgrades.autoClickerSpeed.level * upgrades.autoClickerSpeed.effect : 0)
 
-      if (specialEffects.includes("legendary-5")) {
-        clicksPerSecond *= 1.3 // 30% faster from Time Dilation
-      }
-
-      // Apply anti-effect reduction
-      const autoAntiEffect = activeAntiEffects.find((e) => e.type === "auto")
-      if (autoAntiEffect) {
-        clicksPerSecond *= 1 - autoAntiEffect.severity
-      }
-
-      interval = setInterval(() => {
-        const autoClickValue = moneyPerClick * temporaryMultiplier
-
-        // Apply income anti-effect
-        let finalValue = autoClickValue
-        const incomeAntiEffect = activeAntiEffects.find((e) => e.type === "income")
-        if (incomeAntiEffect) {
-          finalValue *= 1 - incomeAntiEffect.severity
+        // Apply special effects if any
+        if (specialEffects.includes("elite-5")) {
+          clicksPerSecond *= 1.2 // 20% faster from Time Warp
         }
 
-        addMoney(finalValue)
-        setClickCount((prev) => prev + 1)
-      }, 1000 / clicksPerSecond)
+        if (specialEffects.includes("legendary-5")) {
+          clicksPerSecond *= 1.3 // 30% faster from Time Dilation
+        }
+
+        // Apply anti-effect reduction
+        const autoAntiEffect = activeAntiEffects.find((e) => e.type === "auto")
+        if (autoAntiEffect) {
+          clicksPerSecond *= 1 - autoAntiEffect.severity
+        }
+
+        interval = setInterval(() => {
+          const autoClickValue = moneyPerClick * temporaryMultiplier
+
+          // Apply income anti-effect
+          let finalValue = autoClickValue
+          const incomeAntiEffect = activeAntiEffects.find((e) => e.type === "income")
+          if (incomeAntiEffect) {
+            finalValue *= 1 - incomeAntiEffect.severity
+          }
+
+          addMoney(finalValue)
+          setClickCount((prev) => prev + 1)
+        }, 1000 / clicksPerSecond)
+      }
     }
 
     return () => clearInterval(interval)
@@ -770,27 +865,32 @@ export default function MoneyClicker() {
     let interval: NodeJS.Timeout
 
     if (upgrades.passiveIncome.level > 0) {
-      let incomePerSecond = upgrades.passiveIncome.level * upgrades.passiveIncome.effect
+      // Check if passive income is blocked by anti-effect
+      const passiveIncomeBlocked = activeAntiEffects.some((e) => e.id === "passive-income-block")
 
-      // Apply bonuses if any
-      if (bonusEffects.includes("legendary-3")) {
-        incomePerSecond *= 1.25 // 25% more from Golden Touch
-      }
+      if (!passiveIncomeBlocked) {
+        let incomePerSecond = upgrades.passiveIncome.level * upgrades.passiveIncome.effect
 
-      // Check if passive income is blocked by anti-effects
-      const passiveAntiEffect = activeAntiEffects.find((e) => e.type === "passive")
+        // Apply bonuses if any
+        if (bonusEffects.includes("legendary-3")) {
+          incomePerSecond *= 1.25 // 25% more from Golden Touch
+        }
 
-      if (!passiveAntiEffect) {
-        interval = setInterval(() => {
-          // Apply income anti-effect
-          let finalIncome = incomePerSecond * temporaryMultiplier
-          const incomeAntiEffect = activeAntiEffects.find((e) => e.type === "income")
-          if (incomeAntiEffect) {
-            finalIncome *= 1 - incomeAntiEffect.severity
-          }
+        // Check if passive income is blocked by anti-effects
+        const passiveAntiEffect = activeAntiEffects.find((e) => e.type === "passive")
 
-          addMoney(finalIncome)
-        }, 1000)
+        if (!passiveAntiEffect) {
+          interval = setInterval(() => {
+            // Apply income anti-effect
+            let finalIncome = incomePerSecond * temporaryMultiplier
+            const incomeAntiEffect = activeAntiEffects.find((e) => e.type === "income")
+            if (incomeAntiEffect) {
+              finalIncome *= 1 - incomeAntiEffect.severity
+            }
+
+            addMoney(finalIncome)
+          }, 1000)
+        }
       }
     }
 
@@ -820,6 +920,19 @@ export default function MoneyClicker() {
     }
   }, [comboCount])
 
+  // Reset combo when user performs other actions
+  useEffect(() => {
+    if (userPerformedOtherAction && comboCount > 0) {
+      setComboCount(0)
+      setComboTimer(0)
+      if (comboTimerRef.current) {
+        clearInterval(comboTimerRef.current)
+        comboTimerRef.current = null
+      }
+      setUserPerformedOtherAction(false)
+    }
+  }, [userPerformedOtherAction, comboCount])
+
   // Temporary multiplier effect
   useEffect(() => {
     let interval: NodeJS.Timeout
@@ -838,6 +951,27 @@ export default function MoneyClicker() {
 
     return () => clearInterval(interval)
   }, [multiplierTimeLeft])
+
+  // Anti-effect protection timer
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+
+    if (antiEffectProtectionTimeLeft > 0) {
+      setAntiEffectProtection(true)
+
+      interval = setInterval(() => {
+        setAntiEffectProtectionTimeLeft((prev) => {
+          if (prev <= 1) {
+            setAntiEffectProtection(false)
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+
+    return () => clearInterval(interval)
+  }, [antiEffectProtectionTimeLeft])
 
   // Helper function to add money and track total earned
   const addMoney = (amount: number) => {
@@ -891,8 +1025,8 @@ export default function MoneyClicker() {
     }
 
     // Random chance to generate a negative effect
-    if (Math.random() < 0.01) {
-      generateNegativeEffect()
+    if (Math.random() < 0.01 && !antiEffectProtection) {
+      generateAntiEffect()
     }
   }
 
@@ -903,6 +1037,16 @@ export default function MoneyClicker() {
   }
 
   const handleClick = (e: React.MouseEvent) => {
+    // Check if click button is blocked
+    if (clickButtonBlocked) {
+      showAchievementNotification(
+        language === "en"
+          ? "Click button is blocked! Fix the anti-effect to continue clicking."
+          : "Кнопка кліку заблокована! Виправте анти-ефект, щоб продовжити клікати.",
+      )
+      return
+    }
+
     // Skip every 3rd click if that negative effect is active
     if (negativeEffects.some((e) => e.effect === "click-skip-3")) {
       const newClickCount = clickCount + 1
@@ -1030,7 +1174,9 @@ export default function MoneyClicker() {
     setTimeout(() => setShowEffect(false), 500)
 
     // Add a chance to trigger a new anti-effect
-    handleAntiEffects()
+    if (!antiEffectProtection) {
+      handleAntiEffects()
+    }
   }
 
   const calculateUpgradeCost = (upgradeId: UpgradeId) => {
@@ -1046,8 +1192,33 @@ export default function MoneyClicker() {
   }
 
   const buyUpgrade = (upgradeId: UpgradeId) => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
     const upgrade = upgrades[upgradeId]
     const cost = calculateUpgradeCost(upgradeId)
+
+    // Check if upgrades are blocked by ransomware
+    const upgradesBlocked = activeAntiEffects.some((e) => e.id === "ransomware")
+    if (upgradesBlocked) {
+      showAchievementNotification(
+        language === "en"
+          ? "Upgrades are blocked by ransomware! Fix it first."
+          : "Покращення заблоковані програмою-вимагачем! Спочатку виправте це.",
+      )
+      return
+    }
+
+    // Check if specific upgrade is blocked
+    const upgradeBlocked = activeAntiEffects.some((e) => e.type === "upgrade" && e.targetUpgrade === upgradeId)
+    if (upgradeBlocked) {
+      showAchievementNotification(
+        language === "en"
+          ? `${upgrade.name} is blocked by an anti-effect! Fix it first.`
+          : `${upgrade.name} заблоковано анти-ефектом! Спочатку виправте це.`,
+      )
+      return
+    }
 
     if (money >= cost) {
       setMoney((prev) => prev - cost)
@@ -1062,8 +1233,9 @@ export default function MoneyClicker() {
       }))
 
       // Apply upgrade effects
-      if (upgradeId === "doubleValue" && upgrade.level === 0) {
-        setMoneyPerClick((prev) => prev * upgrade.effect)
+      if (upgradeId === "doubleValue") {
+        // Увеличиваем moneyPerClick на effect вместо умножения
+        setMoneyPerClick((prev) => prev + upgrade.effect)
       } else if (upgradeId === "clickMultiplier") {
         setMoneyPerClick((prev) => prev * upgrade.effect)
       }
@@ -1085,6 +1257,9 @@ export default function MoneyClicker() {
   }
 
   const buySkin = (skinId: SkinId) => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
     const skin = skins[skinId]
 
     if (money >= skin.cost && !skin.owned) {
@@ -1109,6 +1284,9 @@ export default function MoneyClicker() {
   }
 
   const applySkin = (skinId: SkinId) => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
     if (skins[skinId].owned) {
       setActiveSkin(skinId)
 
@@ -1126,8 +1304,64 @@ export default function MoneyClicker() {
     }
   }
 
+  // Apply custom theme
+  const applyCustomTheme = (themeId: string) => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
+    if (customThemes[themeId]) {
+      const theme = customThemes[themeId]
+
+      // Apply theme colors
+      document.documentElement.style.setProperty("--primary", theme.colors.primary)
+      document.documentElement.style.setProperty("--secondary", theme.colors.secondary)
+      document.documentElement.style.setProperty("--accent", theme.colors.accent)
+
+      // Set dark theme
+      setTheme("dark")
+
+      showAchievementNotification(
+        language === "en" ? `Applied custom theme: ${theme.name}` : `Застосовано власну тему: ${theme.name}`,
+      )
+    }
+  }
+
+  // Save custom theme
+  const saveCustomTheme = (
+    name: string,
+    colors: {
+      primary: string
+      secondary: string
+      accent: string
+      background: string
+    },
+  ) => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
+    const themeId = `custom-${Date.now()}`
+
+    setCustomThemes((prev) => ({
+      ...prev,
+      [themeId]: {
+        name,
+        colors,
+      },
+    }))
+
+    showAchievementNotification(
+      language === "en" ? `Custom theme "${name}" saved!` : `Власну тему "${name}" збережено!`,
+    )
+
+    setShowCustomThemeCreator(false)
+    saveGameState()
+  }
+
   // Handle fortune wheel spin
   const handleWheelSpin = (prize: Prize) => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
     switch (prize.type) {
       case "money":
         addMoney(prize.value)
@@ -1151,17 +1385,109 @@ export default function MoneyClicker() {
         }
         break
       case "special":
-        // Lucky day - all clicks are critical for 30 seconds
-        setTemporaryMultiplier(5)
-        setMultiplierTimeLeft(30)
-        showAchievementNotification(`Lucky Day! All clicks are 5x for 30 seconds!`)
+        // Random special prize
+        const specialPrizes = [
+          // Lucky day - all clicks are critical for 30 seconds
+          () => {
+            setTemporaryMultiplier(5)
+            setMultiplierTimeLeft(30)
+            showAchievementNotification(`Lucky Day! All clicks are 5x for 30 seconds!`)
+          },
+          // Anti-effect protection
+          () => {
+            setAntiEffectProtection(true)
+            setAntiEffectProtectionTimeLeft(300) // 5 minutes
+            showAchievementNotification(
+              language === "en"
+                ? "Anti-Effect Shield activated! Protected from anti-effects for 5 minutes."
+                : "Щит від анти-ефектів активовано! Захист від анти-ефектів на 5 хвилин.",
+            )
+          },
+          // Clear all anti-effects
+          () => {
+            if (activeAntiEffects.length > 0) {
+              setActiveAntiEffects([])
+              setClickButtonBlocked(false)
+              showAchievementNotification(
+                language === "en"
+                  ? "System Cleanup! All anti-effects have been removed."
+                  : "Очищення системи! Всі анти-ефекти видалено.",
+              )
+            } else {
+              addMoney(5000)
+              showAchievementNotification(
+                language === "en"
+                  ? "No anti-effects to clean! Got ¥5,000 instead."
+                  : "Немає анти-ефектів для очищення! Отримано ¥5,000.",
+              )
+            }
+          },
+        ]
+
+        // Choose random special prize
+        const randomPrize = specialPrizes[Math.floor(Math.random() * specialPrizes.length)]
+        randomPrize()
         break
     }
   }
 
   // Handle case opening
   const handleCaseOpen = (reward: CaseReward) => {
-    // Add the reward to the appropriate category
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
+    // Определяем стоимость кейса
+    let caseCost = 0
+    let caseType = ""
+
+    if (reward.id.startsWith("basic")) {
+      caseCost = 5000
+      caseType = "basic"
+    } else if (reward.id.startsWith("premium")) {
+      caseCost = 25000
+      caseType = "premium"
+    } else if (reward.id.startsWith("elite")) {
+      caseCost = 100000
+      caseType = "elite"
+    } else if (reward.id.startsWith("legendary")) {
+      caseCost = 500000
+      caseType = "legendary"
+    }
+
+    // Снимаем деньги
+    setMoney((prev) => prev - caseCost)
+
+    // Увеличиваем счетчик открытых кейсов
+    setCasesOpened((prev) => ({
+      ...prev,
+      [caseType]: (prev[caseType] || 0) + 1,
+    }))
+
+    // Проверяем, нужно ли разблокировать следующий тип кейсов
+    if (caseType === "basic" && casesOpened.basic + 1 >= 10 && !unlockedCases.includes("premium")) {
+      setUnlockedCases((prev) => [...prev, "premium"])
+      showAchievementNotification(
+        language === "en"
+          ? "Premium Cases Unlocked! You can now purchase premium cases."
+          : "Преміум кейси розблоковано! Тепер ви можете купувати преміум кейси.",
+      )
+    } else if (caseType === "premium" && casesOpened.premium + 1 >= 10 && !unlockedCases.includes("elite")) {
+      setUnlockedCases((prev) => [...prev, "elite"])
+      showAchievementNotification(
+        language === "en"
+          ? "Elite Cases Unlocked! You can now purchase elite cases."
+          : "Елітні кейси розблоковано! Тепер ви можете купувати елітні кейси.",
+      )
+    } else if (caseType === "elite" && casesOpened.elite + 1 >= 10 && !unlockedCases.includes("legendary")) {
+      setUnlockedCases((prev) => [...prev, "legendary"])
+      showAchievementNotification(
+        language === "en"
+          ? "Legendary Cases Unlocked! You can now purchase legendary cases."
+          : "Легендарні кейси розблоковано! Тепер ви можете купувати легендарні кейси.",
+      )
+    }
+
+    // Добавляем награду в соответствующую категорию
     switch (reward.type) {
       case "clickEffect":
         setClickEffects((prev) => [...prev, reward.id])
@@ -1177,18 +1503,106 @@ export default function MoneyClicker() {
         break
     }
 
+    // Шанс получить временную защиту от анти-эффектов
+    if (Math.random() < 0.1) {
+      // 10% шанс
+      setAntiEffectProtection(true)
+      setAntiEffectProtectionTimeLeft(180) // 3 минуты
+      showAchievementNotification(
+        language === "en"
+          ? "Bonus: Anti-Effect Shield activated! Protected from anti-effects for 3 minutes."
+          : "Бонус: Щит від анти-ефектів активовано! Захист від анти-ефектів на 3 хвилини.",
+      )
+    }
+
     // Auto-save after getting a reward
     saveGameState()
   }
 
   // Handle player name change
   const handleNameChange = (name: string) => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
     setPlayerName(name)
     saveGameState()
   }
 
+  // Generate anti-effect
+  const generateAntiEffect = () => {
+    // Создаем список всех возможных анти-эффектов
+    const possibleAntiEffects = [...antiEffects]
+
+    // Добавляем анти-эффект блокировки кнопки клика
+    possibleAntiEffects.push({
+      id: "click-button-block",
+      name: language === "en" ? "Click Button Block" : "Блокування кнопки кліку",
+      description: language === "en" ? "Blocks the click button completely" : "Повністю блокує кнопку кліку",
+      type: "click",
+      severity: 1,
+      fixCost: Math.max(100, Math.floor(money * 0.1)), // 10% от текущих денег, но не менее 100
+      duration: -1,
+      applied: false,
+    })
+
+    // Добавляем анти-эффекты для каждого улучшения
+    Object.entries(upgrades).forEach(([id, upgrade]) => {
+      if (upgrade.level > 0) {
+        possibleAntiEffects.push({
+          id: `${id}-block`,
+          name: language === "en" ? `${upgrade.name} Block` : `Блокування ${upgrade.name}`,
+          description:
+            language === "en" ? `Blocks the ${upgrade.name} upgrade effect` : `Блокує ефект покращення ${upgrade.name}`,
+          type: "upgrade",
+          targetUpgrade: id as UpgradeId,
+          severity: 1,
+          fixCost: Math.max(upgrade.baseCost, Math.floor(money * 0.05)), // 5% от текущих денег или базовая стоимость улучшения
+          duration: -1,
+          applied: false,
+        })
+      }
+    })
+
+    // Выбираем случайный анти-эффект
+    const randomIndex = Math.floor(Math.random() * possibleAntiEffects.length)
+    const selectedEffect = possibleAntiEffects[randomIndex]
+
+    // Проверяем, достаточно ли денег для исправления
+    if (money >= selectedEffect.fixCost) {
+      // Если это блокировка кнопки клика
+      if (selectedEffect.id === "click-button-block") {
+        setClickButtonBlocked(true)
+      }
+
+      // Добавляем анти-эффект
+      setActiveAntiEffects((prev) => [...prev, selectedEffect])
+
+      // Показываем уведомление
+      showAchievementNotification(
+        language === "en" ? `Problem detected: ${selectedEffect.name}` : `Виявлено проблему: ${selectedEffect.name}`,
+      )
+    }
+  }
+
   // Add a prestige function
   const performPrestige = () => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
+    // Проверяем, чи розблоковані всі можливості для першого престижу
+    const allUpgradesUnlocked = Object.values(upgrades).every((upgrade) => upgrade.level > 0)
+    const allSkinsOwned = Object.values(skins).every((skin) => skin.owned)
+
+    // Якщо це перший престиж, перевіряємо умови
+    if (prestigeCount === 0 && (!allUpgradesUnlocked || !allSkinsOwned)) {
+      showAchievementNotification(
+        language === "en"
+          ? "You need to unlock all upgrades and skins before your first prestige!"
+          : "Вам потрібно розблокувати всі покращення та скіни перед першим престижем!",
+      )
+      return
+    }
+
     const prestigeGain = calculateRobocoinsGain(totalEarned)
 
     if (prestigeGain < 0.01) {
@@ -1219,7 +1633,7 @@ export default function MoneyClicker() {
     setMoney(0)
     setTotalEarned(0)
     setClickCount(0)
-    setMoneyPerClick(500) // Use the new base value
+    setMoneyPerClick(1) // Начальное значение клика теперь 1
     setComboCount(0)
     setComboTimer(0)
     setTemporaryMultiplier(1)
@@ -1235,13 +1649,27 @@ export default function MoneyClicker() {
       return resetUpgrades
     })
 
-    // Keep skins
-    // Clear anti-effects
+    // Сохраняем скины при престиже
+    // Очищаем анти-эффекты
     setActiveAntiEffects([])
     setNegativeEffects([])
+    setClickButtonBlocked(false)
 
-    // Reset unlocked cases to just basic
+    // Сбрасываем разблокированные кейсы до базового
     setUnlockedCases(["basic"])
+    setCasesOpened({ basic: 0, premium: 0, elite: 0, legendary: 0 })
+
+    // После первого престижа разблокируем возможность создания собственной темы
+    if (prestigeCount === 0) {
+      // Показываем уведомление о возможности создания собственной темы
+      setTimeout(() => {
+        showAchievementNotification(
+          language === "en"
+            ? "You can now create your own custom theme! Check the settings menu."
+            : "Тепер ви можете створити власну тему! Перевірте меню налаштувань.",
+        )
+      }, 2000)
+    }
 
     // Show achievement
     showAchievementNotification(
@@ -1258,9 +1686,14 @@ export default function MoneyClicker() {
   const handleAntiEffects = () => {
     // Check for new anti-effects on click (with increasing chance based on money)
     const effectChance = Math.min(0.05, antiEffectChance + (totalEarned / 1_000_000_000) * 0.01)
-    const newEffect = applyRandomAntiEffect(activeAntiEffects, effectChance)
+    const newEffect = applyRandomAntiEffect(activeAntiEffects, totalEarned, effectChance)
 
     if (newEffect) {
+      // Если это блокировка кнопки клика
+      if (newEffect.id === "click-button-block") {
+        setClickButtonBlocked(true)
+      }
+
       setActiveAntiEffects((prev) => [...prev, newEffect])
       showAchievementNotification(
         language === "en"
@@ -1272,11 +1705,20 @@ export default function MoneyClicker() {
 
   // Add a function to fix anti-effects
   const fixAntiEffect = (effectId: string) => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
     const effectToFix = activeAntiEffects.find((e) => e.id === effectId)
     if (!effectToFix) return
 
     if (money >= effectToFix.fixCost) {
       setMoney((prev) => prev - effectToFix.fixCost)
+
+      // Если это блокировка кнопки клика
+      if (effectId === "click-button-block") {
+        setClickButtonBlocked(false)
+      }
+
       setActiveAntiEffects((prev) => prev.filter((e) => e.id !== effectId))
       showAchievementNotification(
         language === "en"
@@ -1308,8 +1750,8 @@ export default function MoneyClicker() {
   useEffect(() => {
     if (robocoins > 0) {
       const bonusMultiplier = calculateBonusMultiplier(robocoins)
-      // Apply the bonus to base money per click (now 500 instead of 100)
-      setMoneyPerClick(500 * bonusMultiplier)
+      // Apply the bonus to base money per click (now 1 instead of 500)
+      setMoneyPerClick(1 * bonusMultiplier)
     }
   }, [robocoins])
 
@@ -1339,61 +1781,31 @@ export default function MoneyClicker() {
   // Get current skin colors
   const currentSkin = skins[activeSkin]
 
-  // Declare the missing variables
-  const generateNegativeEffect = () => {
-    // Implement the logic to generate a negative effect and add it to the state
-    // This is a placeholder, replace with your actual implementation
-    console.log("Generating negative effect")
-  }
-
   // Add a function to check and unlock new cases based on progress
   const checkCaseUnlocks = useCallback(() => {
-    const newUnlocks = []
-
-    if (!unlockedCases.includes("premium") && totalEarned >= 500000) {
-      newUnlocks.push("premium")
-    }
-
-    if (!unlockedCases.includes("elite") && totalEarned >= 5000000) {
-      newUnlocks.push("elite")
-    }
-
-    if (!unlockedCases.includes("legendary") && totalEarned >= 50000000) {
-      newUnlocks.push("legendary")
-    }
-
-    if (newUnlocks.length > 0) {
-      setUnlockedCases((prev) => [...prev, ...newUnlocks])
-
-      // Show notification for each new case
-      newUnlocks.forEach((caseType) => {
-        setTimeout(() => {
-          showAchievementNotification(
-            language === "en"
-              ? `New case unlocked: ${caseType.charAt(0).toUpperCase() + caseType.slice(1)}!`
-              : `Розблоковано новий кейс: ${caseType.charAt(0).toUpperCase() + caseType.slice(1)}!`,
-          )
-        }, 500)
-      })
-    }
-  }, [totalEarned, unlockedCases, language])
-
-  // Call this function whenever totalEarned changes
-  useEffect(() => {
-    checkCaseUnlocks()
-  }, [totalEarned, checkCaseUnlocks])
+    // Теперь разблокировка кейсов происходит через счетчик открытых кейсов
+    // Эта функция больше не используется для разблокировки кейсов
+  }, [])
 
   // Add a timer for anti-effects based on game time
   useEffect(() => {
     const antiEffectInterval = setInterval(() => {
+      // Если активна защита от анти-эффектов, пропускаем
+      if (antiEffectProtection) return
+
       // Chance increases with total earned
       const baseChance = 0.005 // 0.5% base chance every 30 seconds
       const scaledChance = baseChance * (1 + totalEarned / 10000000)
       const cappedChance = Math.min(0.05, scaledChance) // Cap at 5%
 
-      const newEffect = applyRandomAntiEffect(activeAntiEffects, cappedChance)
+      const newEffect = applyRandomAntiEffect(activeAntiEffects, totalEarned, cappedChance)
 
       if (newEffect) {
+        // Если это блокировка кнопки клика
+        if (newEffect.id === "click-button-block") {
+          setClickButtonBlocked(true)
+        }
+
         setActiveAntiEffects((prev) => [...prev, newEffect])
         showAchievementNotification(
           language === "en"
@@ -1404,10 +1816,13 @@ export default function MoneyClicker() {
     }, 30000) // Check every 30 seconds
 
     return () => clearInterval(antiEffectInterval)
-  }, [totalEarned, activeAntiEffects, language])
+  }, [totalEarned, activeAntiEffects, language, antiEffectProtection])
 
   // Toggle desktop interface
   const toggleInterface = () => {
+    // Mark that user performed an action that should reset combo
+    setUserPerformedOtherAction(true)
+
     if (desktopInterfaceUnlocked) {
       setUseDesktopInterface(!useDesktopInterface)
       showAchievementNotification(
@@ -1417,6 +1832,31 @@ export default function MoneyClicker() {
       )
       saveGameState()
     }
+  }
+
+  // Исправление проблемы с админ-панелью
+  // Добавим проверку URL параметра для открытия админ-панели
+  useEffect(() => {
+    // Проверяем наличие параметра admin=true в URL
+    const urlParams = new URLSearchParams(window.location.search)
+    if (urlParams.get("admin") === "true") {
+      setShowAdminPanel(true)
+    }
+
+    // Обработчик секретной комбинации клавиш (Ctrl+Shift+A)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === "A") {
+        setShowAdminPanel(true)
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [])
+
+  // Функция для обработки действий, которые должны сбрасывать комбо
+  const handleActionThatResetsCombo = () => {
+    setUserPerformedOtherAction(true)
   }
 
   return (
@@ -1444,7 +1884,22 @@ export default function MoneyClicker() {
           <div className="absolute inset-0 digital-rain"></div>
           <style jsx>{`
             .digital-rain {
-              background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='0' y='10' fill='${currentSkin.colors.secondary.replace("#", "%23")}' fontFamily='monospace'%3E01%3C/text%3E%3Ctext x='20' y='30' fill='${currentSkin.colors.secondary.replace("#", "%23")}' fontFamily='monospace'%3E10%3C/text%3E%3Ctext x='40' y='50' fill='${currentSkin.colors.secondary.replace("#", "%23")}' fontFamily='monospace'%3E01%3C/text%3E%3Ctext x='60' y='70' fill='${currentSkin.colors.secondary.replace("#", "%23")}' fontFamily='monospace'%3E10%3C/text%3E%3Ctext x='80' y='90' fill='${currentSkin.colors.secondary.replace("#", "%23")}' fontFamily='monospace'%3E01%3C/text%3E%3C/svg%3E");
+              background-image: url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Ctext x='0' y='10' fill='${currentSkin.colors.secondary.replace(
+                "#",
+                "%23",
+              )}' fontFamily='monospace'%3E01%3C/text%3E%3Ctext x='20' y='30' fill='${currentSkin.colors.secondary.replace(
+                "#",
+                "%23",
+              )}' fontFamily='monospace'%3E10%3C/text%3E%3Ctext x='40' y='50' fill='${currentSkin.colors.secondary.replace(
+                "#",
+                "%23",
+              )}' fontFamily='monospace'%3E01%3C/text%3E%3Ctext x='60' y='70' fill='${currentSkin.colors.secondary.replace(
+                "#",
+                "%23",
+              )}' fontFamily='monospace'%3E10%3C/text%3E%3Ctext x='80' y='90' fill='${currentSkin.colors.secondary.replace(
+                "#",
+                "%23",
+              )}' fontFamily='monospace'%3E01%3C/text%3E%3C/svg%3E");
               animation: rain 20s linear infinite;
             }
             @keyframes rain {
@@ -1548,7 +2003,10 @@ export default function MoneyClicker() {
                           language === "en" ? currentSkin.colors.primary : `${currentSkin.colors.secondary}50`,
                         color: language === "en" ? currentSkin.colors.primary : currentSkin.colors.secondary,
                       }}
-                      onClick={() => setLanguage("en")}
+                      onClick={() => {
+                        setLanguage("en")
+                        handleActionThatResetsCombo()
+                      }}
                     >
                       EN
                     </button>
@@ -1559,7 +2017,10 @@ export default function MoneyClicker() {
                           language === "uk" ? currentSkin.colors.primary : `${currentSkin.colors.secondary}50`,
                         color: language === "uk" ? currentSkin.colors.primary : currentSkin.colors.secondary,
                       }}
-                      onClick={() => setLanguage("uk")}
+                      onClick={() => {
+                        setLanguage("uk")
+                        handleActionThatResetsCombo()
+                      }}
                     >
                       UK
                     </button>
@@ -1577,7 +2038,10 @@ export default function MoneyClicker() {
                         borderColor: musicEnabled ? currentSkin.colors.primary : `${currentSkin.colors.secondary}50`,
                         color: musicEnabled ? currentSkin.colors.primary : currentSkin.colors.secondary,
                       }}
-                      onClick={() => setMusicEnabled(true)}
+                      onClick={() => {
+                        setMusicEnabled(true)
+                        handleActionThatResetsCombo()
+                      }}
                     >
                       {language === "en" ? "On" : "Увімк."}
                     </button>
@@ -1587,7 +2051,10 @@ export default function MoneyClicker() {
                         borderColor: !musicEnabled ? currentSkin.colors.primary : `${currentSkin.colors.secondary}50`,
                         color: !musicEnabled ? currentSkin.colors.primary : currentSkin.colors.secondary,
                       }}
-                      onClick={() => setMusicEnabled(false)}
+                      onClick={() => {
+                        setMusicEnabled(false)
+                        handleActionThatResetsCombo()
+                      }}
                     >
                       {language === "en" ? "Off" : "Вимк."}
                     </button>
@@ -1609,7 +2076,10 @@ export default function MoneyClicker() {
                             : `${currentSkin.colors.secondary}50`,
                           color: !useDesktopInterface ? currentSkin.colors.primary : currentSkin.colors.secondary,
                         }}
-                        onClick={() => setUseDesktopInterface(false)}
+                        onClick={() => {
+                          setUseDesktopInterface(false)
+                          handleActionThatResetsCombo()
+                        }}
                       >
                         {language === "en" ? "Mobile" : "Мобільний"}
                       </button>
@@ -1621,10 +2091,99 @@ export default function MoneyClicker() {
                             : `${currentSkin.colors.secondary}50`,
                           color: useDesktopInterface ? currentSkin.colors.primary : currentSkin.colors.secondary,
                         }}
-                        onClick={() => setUseDesktopInterface(true)}
+                        onClick={() => {
+                          setUseDesktopInterface(true)
+                          handleActionThatResetsCombo()
+                        }}
                       >
                         {language === "en" ? "Desktop" : "Десктопний"}
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Custom themes section (only if prestige > 0) */}
+                {prestigeCount > 0 && (
+                  <div className="mt-4 border-t pt-4" style={{ borderColor: `${currentSkin.colors.secondary}40` }}>
+                    <div className="flex justify-between items-center mb-2">
+                      <span style={{ color: currentSkin.colors.secondary }}>
+                        {language === "en" ? "Custom Themes:" : "Власні теми:"}
+                      </span>
+                      <button
+                        className="px-2 py-1 rounded-sm border"
+                        style={{
+                          borderColor: currentSkin.colors.primary,
+                          color: currentSkin.colors.primary,
+                        }}
+                        onClick={() => {
+                          setShowCustomThemeCreator(true)
+                          handleActionThatResetsCombo()
+                        }}
+                      >
+                        {language === "en" ? "Create New" : "Створити нову"}
+                      </button>
+                    </div>
+
+                    {Object.keys(customThemes).length > 0 ? (
+                      <div className="space-y-2 mt-2">
+                        {Object.entries(customThemes).map(([id, theme]) => (
+                          <div key={id} className="flex justify-between items-center">
+                            <span style={{ color: currentSkin.colors.primary }}>{theme.name}</span>
+                            <div className="flex gap-2">
+                              <div className="flex gap-1">
+                                {Object.values(theme.colors).map((color, index) => (
+                                  <div
+                                    key={index}
+                                    className="w-3 h-3 rounded-sm"
+                                    style={{ backgroundColor: color }}
+                                  ></div>
+                                ))}
+                              </div>
+                              <button
+                                className="px-2 py-0.5 text-xs rounded-sm border"
+                                style={{
+                                  borderColor: currentSkin.colors.secondary,
+                                  color: currentSkin.colors.secondary,
+                                }}
+                                onClick={() => {
+                                  applyCustomTheme(id)
+                                  handleActionThatResetsCombo()
+                                }}
+                              >
+                                {language === "en" ? "Apply" : "Застосувати"}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-center" style={{ color: `${currentSkin.colors.secondary}80` }}>
+                        {language === "en"
+                          ? "No custom themes yet. Create your first theme!"
+                          : "Ще немає власних тем. Створіть свою першу тему!"}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Anti-effect protection status */}
+                {antiEffectProtection && (
+                  <div
+                    className="mt-4 p-2 border rounded-sm"
+                    style={{
+                      borderColor: currentSkin.colors.accent,
+                      backgroundColor: `${currentSkin.colors.accent}10`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-5 w-5" style={{ color: currentSkin.colors.accent }} />
+                      <span style={{ color: currentSkin.colors.accent }}>
+                        {language === "en" ? "Anti-Effect Protection:" : "Захист від анти-ефектів:"}
+                      </span>
+                      <span className="ml-auto" style={{ color: currentSkin.colors.accent }}>
+                        {Math.floor(antiEffectProtectionTimeLeft / 60)}:
+                        {(antiEffectProtectionTimeLeft % 60).toString().padStart(2, "0")}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -1638,7 +2197,10 @@ export default function MoneyClicker() {
                     color: currentSkin.colors.secondary,
                     boxShadow: `0 0 10px ${currentSkin.colors.secondary}40`,
                   }}
-                  onClick={saveGameState}
+                  onClick={() => {
+                    saveGameState()
+                    handleActionThatResetsCombo()
+                  }}
                 >
                   {language === "en" ? "Save Game" : "Зберегти гру"}
                 </button>
@@ -1650,7 +2212,10 @@ export default function MoneyClicker() {
                     color: currentSkin.colors.primary,
                     boxShadow: `0 0 10px ${currentSkin.colors.primary}40`,
                   }}
-                  onClick={() => performPrestige()}
+                  onClick={() => {
+                    performPrestige()
+                    handleActionThatResetsCombo()
+                  }}
                 >
                   {language === "en" ? "Prestige" : "Престиж"}
                 </button>
@@ -1662,7 +2227,10 @@ export default function MoneyClicker() {
                     color: currentSkin.colors.accent,
                     boxShadow: `0 0 10px ${currentSkin.colors.accent}40`,
                   }}
-                  onClick={resetGameState}
+                  onClick={() => {
+                    resetGameState()
+                    handleActionThatResetsCombo()
+                  }}
                 >
                   {language === "en" ? "Reset Game" : "Скинути гру"}
                 </button>
@@ -1674,7 +2242,10 @@ export default function MoneyClicker() {
                     color: currentSkin.colors.primary,
                     boxShadow: `0 0 10px ${currentSkin.colors.primary}40`,
                   }}
-                  onClick={() => setShowSettings(false)}
+                  onClick={() => {
+                    setShowSettings(false)
+                    handleActionThatResetsCombo()
+                  }}
                 >
                   {language === "en" ? "Close" : "Закрити"}
                 </button>
@@ -1684,11 +2255,31 @@ export default function MoneyClicker() {
         )}
       </AnimatePresence>
 
+      {/* Custom Theme Creator */}
+      <AnimatePresence>
+        {showCustomThemeCreator && (
+          <CustomThemeCreator
+            onClose={() => {
+              setShowCustomThemeCreator(false)
+              handleActionThatResetsCombo()
+            }}
+            onSave={saveCustomTheme}
+            primaryColor={currentSkin.colors.primary}
+            secondaryColor={currentSkin.colors.secondary}
+            accentColor={currentSkin.colors.accent}
+            language={language}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Settings, music and fortune wheel buttons */}
       <div className="fixed right-4 top-4 z-40 flex gap-2">
         <MusicPlayer
           enabled={musicEnabled}
-          onToggle={() => setMusicEnabled(!musicEnabled)}
+          onToggle={() => {
+            setMusicEnabled(!musicEnabled)
+            handleActionThatResetsCombo()
+          }}
           primaryColor={currentSkin.colors.primary}
           secondaryColor={currentSkin.colors.secondary}
         />
@@ -1700,7 +2291,10 @@ export default function MoneyClicker() {
             color: currentSkin.colors.accent,
             boxShadow: `0 0 10px ${currentSkin.colors.accent}40`,
           }}
-          onClick={() => setShowFortuneWheel(!showFortuneWheel)}
+          onClick={() => {
+            setShowFortuneWheel(!showFortuneWheel)
+            handleActionThatResetsCombo()
+          }}
           title={language === "en" ? "Fortune Wheel" : "Колесо Фортуни"}
         >
           <Sparkles className="h-5 w-5" />
@@ -1713,7 +2307,10 @@ export default function MoneyClicker() {
             color: currentSkin.colors.primary,
             boxShadow: `0 0 10px ${currentSkin.colors.primary}40`,
           }}
-          onClick={() => setShowSettings(!showSettings)}
+          onClick={() => {
+            setShowSettings(!showSettings)
+            handleActionThatResetsCombo()
+          }}
           title={language === "en" ? "Settings" : "Налаштування"}
         >
           <Settings className="h-5 w-5" />
@@ -1770,12 +2367,30 @@ export default function MoneyClicker() {
           isAdvancedUnlocked={isAdvancedUnlocked}
           isSpecialUnlocked={isSpecialUnlocked}
           showFortuneWheel={showFortuneWheel}
+          clickButtonBlocked={clickButtonBlocked}
+          antiEffectProtection={antiEffectProtection}
+          antiEffectProtectionTimeLeft={antiEffectProtectionTimeLeft}
           onClickArea={handleClick}
-          onToggleSettings={() => setShowSettings(!showSettings)}
-          onToggleMusic={() => setMusicEnabled(!musicEnabled)}
-          onToggleFortuneWheel={() => setShowFortuneWheel(!showFortuneWheel)}
-          onTabChange={setActiveTab}
-          onCategoryChange={setActiveCategory}
+          onToggleSettings={() => {
+            setShowSettings(!showSettings)
+            handleActionThatResetsCombo()
+          }}
+          onToggleMusic={() => {
+            setMusicEnabled(!musicEnabled)
+            handleActionThatResetsCombo()
+          }}
+          onToggleFortuneWheel={() => {
+            setShowFortuneWheel(!showFortuneWheel)
+            handleActionThatResetsCombo()
+          }}
+          onTabChange={(tab) => {
+            setActiveTab(tab)
+            handleActionThatResetsCombo()
+          }}
+          onCategoryChange={(category) => {
+            setActiveCategory(category)
+            handleActionThatResetsCombo()
+          }}
           onBuyUpgrade={buyUpgrade}
           onBuySkin={buySkin}
           onApplySkin={applySkin}
@@ -1820,12 +2435,30 @@ export default function MoneyClicker() {
           isAdvancedUnlocked={isAdvancedUnlocked}
           isSpecialUnlocked={isSpecialUnlocked}
           showFortuneWheel={showFortuneWheel}
+          clickButtonBlocked={clickButtonBlocked}
+          antiEffectProtection={antiEffectProtection}
+          antiEffectProtectionTimeLeft={antiEffectProtectionTimeLeft}
           onClickArea={handleClick}
-          onToggleSettings={() => setShowSettings(!showSettings)}
-          onToggleMusic={() => setMusicEnabled(!musicEnabled)}
-          onToggleFortuneWheel={() => setShowFortuneWheel(!showFortuneWheel)}
-          onTabChange={setActiveTab}
-          onCategoryChange={setActiveCategory}
+          onToggleSettings={() => {
+            setShowSettings(!showSettings)
+            handleActionThatResetsCombo()
+          }}
+          onToggleMusic={() => {
+            setMusicEnabled(!musicEnabled)
+            handleActionThatResetsCombo()
+          }}
+          onToggleFortuneWheel={() => {
+            setShowFortuneWheel(!showFortuneWheel)
+            handleActionThatResetsCombo()
+          }}
+          onTabChange={(tab) => {
+            setActiveTab(tab)
+            handleActionThatResetsCombo()
+          }}
+          onCategoryChange={(category) => {
+            setActiveCategory(category)
+            handleActionThatResetsCombo()
+          }}
           onBuyUpgrade={buyUpgrade}
           onBuySkin={buySkin}
           onApplySkin={applySkin}
@@ -1846,7 +2479,84 @@ export default function MoneyClicker() {
         src="https://cdn.pixabay.com/download/audio/2022/03/10/audio_c8c8a73467.mp3?filename=cyber-war-126419.mp3"
         style={{ display: "none" }}
       />
+
+      {/* Админ-панель */}
+      <AdminPanel
+        isOpen={showAdminPanel}
+        onClose={() => setShowAdminPanel(false)}
+        gameState={{
+          money,
+          totalEarned,
+          clickCount,
+          moneyPerClick,
+          robocoins,
+          totalRobocoins,
+          prestigeCount,
+          playerName,
+          language,
+          musicEnabled,
+          useDesktopInterface,
+          desktopInterfaceUnlocked,
+          upgrades,
+          skins,
+          activeSkin,
+          unlockedCases,
+          casesOpened,
+          clickEffects,
+          visualEffects,
+          bonusEffects,
+          specialEffects,
+          customThemes,
+        }}
+        onUpdateGameState={updateGameState}
+        onResetGame={resetGameState}
+        primaryColor={currentSkin.colors.primary}
+        secondaryColor={currentSkin.colors.secondary}
+        accentColor={currentSkin.colors.accent}
+        language={language}
+      />
+
+      {/* Fortune Wheel Modal */}
+      <AnimatePresence>
+        {showFortuneWheel && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="relative w-full max-w-md rounded-sm border-2 bg-black/90 p-6"
+              style={{
+                borderColor: currentSkin.colors.primary,
+                boxShadow: `0 0 20px ${currentSkin.colors.primary}80`,
+              }}
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+            >
+              <button
+                className="absolute right-4 top-4 text-gray-400 hover:text-white"
+                onClick={() => {
+                  setShowFortuneWheel(false)
+                  handleActionThatResetsCombo()
+                }}
+              >
+                ✕
+              </button>
+              <div className="flex justify-center">
+                <FortuneWheel
+                  onSpin={handleWheelSpin}
+                  canSpin={true}
+                  primaryColor={currentSkin.colors.primary}
+                  secondaryColor={currentSkin.colors.secondary}
+                  accentColor={currentSkin.colors.accent}
+                />
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
-

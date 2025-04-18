@@ -31,7 +31,8 @@ export type SkinId =
   | "digital"
   | "ethereal"
 
-export type TabId = "upgrades" | "skins" | "wheel" | "cases" | "leaderboard"
+// Обновляем типы для TabId, удаляем "wheel"
+export type TabId = "upgrades" | "skins" | "cases" | "leaderboard"
 
 export interface Upgrade {
   name: string
@@ -80,4 +81,3 @@ export interface GameState {
   unlockedCases: string[]
   musicEnabled: boolean
 }
-

@@ -157,7 +157,7 @@ export default function UpgradeProgress({
         />
         <div className="grid grid-cols-2 gap-x-2 gap-y-1 mt-1">
           <div className="text-xs flex justify-between">
-            <span style={{ color: secondaryColor }}>Double Value:</span>
+            <span style={{ color: secondaryColor }}>Click Value:</span>
             <span style={{ color: advancedProgress.doubleValue.progress === 1 ? accentColor : primaryColor }}>
               {advancedProgress.doubleValue.current}/{ADVANCED_REQUIREMENTS.doubleValue}
             </span>
@@ -238,4 +238,3 @@ export default function UpgradeProgress({
     </div>
   )
 }
-

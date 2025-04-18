@@ -70,13 +70,8 @@ export default function Leaderboard({
       })
     }
 
-    // Sort by prestige (primary) and score (secondary)
-    updatedLeaderboard.sort((a, b) => {
-      if (b.prestige !== a.prestige) {
-        return b.prestige - a.prestige
-      }
-      return b.score - a.score
-    })
+    // Sort by prestige only (primary)
+    updatedLeaderboard.sort((a, b) => b.prestige - a.prestige)
 
     // Limit to top 10
     const topEntries = updatedLeaderboard.slice(0, 10)
@@ -222,4 +217,3 @@ export default function Leaderboard({
     </div>
   )
 }
-

@@ -123,4 +123,3 @@ export function getLeaderboard(): Array<{ name: string; score: number }> {
     return []
   }
 }
-

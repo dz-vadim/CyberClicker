@@ -51,6 +51,9 @@ interface MobileInterfaceProps {
   isAdvancedUnlocked: boolean
   isSpecialUnlocked: boolean
   showFortuneWheel: boolean
+  clickButtonBlocked: boolean
+  antiEffectProtection: boolean
+  antiEffectProtectionTimeLeft: number
   onClickArea: (e: React.MouseEvent) => void
   onToggleSettings: () => void
   onToggleMusic: () => void
@@ -101,6 +104,9 @@ export default function MobileInterface({
   isAdvancedUnlocked,
   isSpecialUnlocked,
   showFortuneWheel,
+  clickButtonBlocked,
+  antiEffectProtection,
+  antiEffectProtectionTimeLeft,
   onClickArea,
   onToggleSettings,
   onToggleMusic,
@@ -122,7 +128,7 @@ export default function MobileInterface({
   const t = translations[language]
 
   return (
-    <div className="flex flex-col w-full max-w-4xl mx-auto">
+    <div className="flex flex-col w-full max-w-4xl mx-auto select-none">
       {/* Header - только с эффектом */}
       <header className="mb-6 text-center relative">
         <Glitch className="text-4xl md:text-5xl font-bold mb-2" style={{ color: currentSkin.colors.primary }}>
@@ -133,14 +139,34 @@ export default function MobileInterface({
       {/* Click area */}
       <div className="mb-6">
         <div
-          className="relative min-h-[200px] rounded-sm border-2 flex items-center justify-center cursor-pointer overflow-hidden"
+          className={`relative min-h-[200px] rounded-sm border-2 flex items-center justify-center ${
+            clickButtonBlocked ? "cursor-not-allowed" : "cursor-pointer"
+          } overflow-hidden`}
           style={{
-            borderColor: currentSkin.colors.secondary,
-            boxShadow: `0 0 15px ${currentSkin.colors.secondary}40`,
+            borderColor: clickButtonBlocked ? `${currentSkin.colors.secondary}50` : currentSkin.colors.secondary,
+            boxShadow: clickButtonBlocked ? "none" : `0 0 15px ${currentSkin.colors.secondary}40`,
             backgroundColor: `${currentSkin.colors.background}80`,
+            opacity: clickButtonBlocked ? 0.7 : 1,
           }}
           onClick={onClickArea}
         >
+          {/* Anti-effect protection indicator */}
+          {antiEffectProtection && (
+            <div
+              className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-sm border text-xs"
+              style={{
+                borderColor: currentSkin.colors.accent,
+                backgroundColor: `${currentSkin.colors.accent}20`,
+                color: currentSkin.colors.accent,
+              }}
+            >
+              <span>
+                {Math.floor(antiEffectProtectionTimeLeft / 60)}:
+                {(antiEffectProtectionTimeLeft % 60).toString().padStart(2, "0")}
+              </span>
+            </div>
+          )}
+
           {/* Click effects */}
           {showEffect && (
             <ClickEffect
@@ -195,6 +221,25 @@ export default function MobileInterface({
               {language === "en" ? "per click" : "за клік"}
             </div>
           </div>
+
+          {/* Click button blocked overlay */}
+          {clickButtonBlocked && (
+            <div
+              className="absolute inset-0 flex items-center justify-center bg-black/50"
+              style={{ backdropFilter: "blur(2px)" }}
+            >
+              <div
+                className="text-center font-bold text-lg px-4 py-2 border-2 rounded-sm"
+                style={{
+                  borderColor: currentSkin.colors.accent,
+                  color: currentSkin.colors.accent,
+                  backgroundColor: "rgba(0,0,0,0.8)",
+                }}
+              >
+                {language === "en" ? "CLICK BUTTON BLOCKED" : "КНОПКА КЛІКУ ЗАБЛОКОВАНА"}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -285,8 +330,8 @@ export default function MobileInterface({
       />
 
       {/* Tab navigation */}
-      <div className="grid grid-cols-5 gap-1 mb-4">
-        {["upgrades", "skins", "wheel", "cases", "leaderboard"].map((tab) => (
+      <div className="grid grid-cols-4 gap-1 mb-4">
+        {["upgrades", "skins", "cases", "leaderboard"].map((tab) => (
           <button
             key={tab}
             className={`py-2 text-xs uppercase font-bold transition-all border-b-2 ${
@@ -298,7 +343,11 @@ export default function MobileInterface({
             }}
             onClick={() => onTabChange(tab as TabId)}
           >
-            {translations[language][tab as keyof typeof translations.en]}
+            {tab === "leaderboard"
+              ? language === "en"
+                ? "Leaders"
+                : "Лідери"
+              : translations[language][tab as keyof typeof translations.en]}
           </button>
         ))}
       </div>
@@ -413,31 +462,6 @@ export default function MobileInterface({
           </div>
         )}
 
-        {/* Wheel tab */}
-        {activeTab === "wheel" && (
-          <div className="flex justify-center">
-            <div className="text-center p-4">
-              <p className="mb-4" style={{ color: currentSkin.colors.secondary }}>
-                {language === "en"
-                  ? "Click the wheel button in the top right corner to spin the fortune wheel!"
-                  : "Натисніть кнопку колеса у верхньому правому куті, щоб крутити колесо фортуни!"}
-              </p>
-              <button
-                className="px-6 py-2 rounded-sm border-2 font-bold uppercase tracking-wider transition-all hover:scale-105"
-                style={{
-                  borderColor: currentSkin.colors.primary,
-                  color: currentSkin.colors.primary,
-                  backgroundColor: `${currentSkin.colors.secondary}20`,
-                  boxShadow: `0 0 10px ${currentSkin.colors.primary}40`,
-                }}
-                onClick={onToggleFortuneWheel}
-              >
-                {language === "en" ? "Open Fortune Wheel" : "Відкрити Колесо Фортуни"}
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Cases tab */}
         {activeTab === "cases" && (
           <CaseSystem
@@ -505,4 +529,3 @@ export default function MobileInterface({
     </div>
   )
 }
-

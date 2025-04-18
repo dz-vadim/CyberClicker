@@ -28,4 +28,3 @@ export default function ProgressBar({ value, maxValue, primaryColor, secondaryCo
     </div>
   )
 }
-

@@ -7,7 +7,6 @@ import Glitch from "./glitch"
 import ClickEffect from "./click-effect"
 import UpgradeItem from "./upgrade-item"
 import SkinSelector from "./skin-selector"
-import FortuneWheel from "./fortune-wheel"
 import CaseSystem from "./case-system"
 import PrestigePanel from "./prestige-panel"
 import AntiEffectsPanel from "./anti-effects-panel"
@@ -120,7 +119,7 @@ export default function GameInterface({
   const t = translations[language]
 
   return (
-    <div className="flex flex-col w-full max-w-4xl mx-auto">
+    <div className="flex flex-col w-full max-w-4xl mx-auto select-none">
       {/* Header */}
       <header className="mb-6 text-center">
         <Glitch className="text-4xl md:text-5xl font-bold mb-2" style={{ color: currentSkin.colors.primary }}>
@@ -280,8 +279,8 @@ export default function GameInterface({
         {/* Right column - Tabs */}
         <div className="flex flex-col gap-4">
           {/* Tab navigation */}
-          <div className="grid grid-cols-5 gap-1">
-            {["upgrades", "skins", "wheel", "cases", "leaderboard"].map((tab) => (
+          <div className="grid grid-cols-4 gap-1">
+            {["upgrades", "skins", "cases", "leaderboard"].map((tab) => (
               <button
                 key={tab}
                 className={`py-2 text-xs uppercase font-bold transition-all border-b-2 ${
@@ -293,7 +292,11 @@ export default function GameInterface({
                 }}
                 onClick={() => onTabChange(tab as TabId)}
               >
-                {translations[language][tab as keyof typeof translations.en]}
+                {tab === "leaderboard"
+                  ? language === "en"
+                    ? "Leaders"
+                    : "Лідери"
+                  : translations[language][tab as keyof typeof translations.en]}
               </button>
             ))}
           </div>
@@ -412,19 +415,6 @@ export default function GameInterface({
               </div>
             )}
 
-            {/* Wheel tab */}
-            {activeTab === "wheel" && (
-              <div className="flex justify-center">
-                <FortuneWheel
-                  onSpin={onWheelSpin}
-                  canSpin={true}
-                  primaryColor={currentSkin.colors.primary}
-                  secondaryColor={currentSkin.colors.secondary}
-                  accentColor={currentSkin.colors.accent}
-                />
-              </div>
-            )}
-
             {/* Cases tab */}
             {activeTab === "cases" && (
               <CaseSystem
@@ -481,4 +471,3 @@ export default function GameInterface({
     </div>
   )
 }
-

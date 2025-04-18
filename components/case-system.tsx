@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Sparkles, X } from "lucide-react"
+import { Sparkles, X, Info } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 interface CaseSystemProps {
@@ -13,6 +13,7 @@ interface CaseSystemProps {
   secondaryColor: string
   accentColor: string
   unlockedCases?: string[] // Add this prop
+  casesOpened?: Record<string, number> // Додаємо лічильник відкритих кейсів
 }
 
 export type CaseReward = {
@@ -33,6 +34,9 @@ const caseTypes = [
     description: "Common rewards with a small chance for something special",
     color: "#05d9e8",
     image: "📦",
+    requiredToUnlock: 0,
+    nextCase: "premium",
+    requiredOpens: 10,
   },
   {
     id: "premium",
@@ -41,6 +45,9 @@ const caseTypes = [
     description: "Better rewards with higher chances for rare items",
     color: "#ff2a6d",
     image: "🎁",
+    requiredToUnlock: 10, // Потрібно відкрити 10 базових кейсів
+    nextCase: "elite",
+    requiredOpens: 10,
   },
   {
     id: "elite",
@@ -49,6 +56,9 @@ const caseTypes = [
     description: "High-quality rewards with guaranteed rare or better",
     color: "#d300c5",
     image: "💎",
+    requiredToUnlock: 10, // Потрібно відкрити 10 преміум кейсів
+    nextCase: "legendary",
+    requiredOpens: 10,
   },
   {
     id: "legendary",
@@ -57,6 +67,9 @@ const caseTypes = [
     description: "The best rewards with a chance for legendary items",
     color: "#39ff14",
     image: "🏆",
+    requiredToUnlock: 10, // Потрібно відкрити 10 елітних кейсів
+    nextCase: null,
+    requiredOpens: 0,
   },
 ]
 
@@ -249,11 +262,13 @@ export default function CaseSystem({
   secondaryColor,
   accentColor,
   unlockedCases = ["basic"], // Default to only basic case
+  casesOpened = { basic: 0, premium: 0, elite: 0, legendary: 0 }, // Додаємо лічильник відкритих кейсів
 }: CaseSystemProps) {
   const [selectedCase, setSelectedCase] = useState<string | null>(null)
   const [isOpening, setIsOpening] = useState(false)
   const [reward, setReward] = useState<CaseReward | null>(null)
   const [showReward, setShowReward] = useState(false)
+  const [showInfo, setShowInfo] = useState<string | null>(null)
 
   // Filter case types based on unlocked cases
   const availableCaseTypes = caseTypes.filter((caseType) => unlockedCases.includes(caseType.id))
@@ -262,7 +277,7 @@ export default function CaseSystem({
     const caseType = caseTypes.find((c) => c.id === caseId)
     if (!caseType || money < caseType.cost) return
 
-    onSpendMoney(caseType.cost)
+    onSpendMoney(caseType.cost) // Викликаємо функцію для списання грошей
     setSelectedCase(caseId)
     setIsOpening(true)
 
@@ -285,59 +300,144 @@ export default function CaseSystem({
     setSelectedCase(null)
   }
 
+  // Функція для отримання прогресу відкриття кейсів
+  const getCaseProgress = (caseId: string) => {
+    const caseType = caseTypes.find((c) => c.id === caseId)
+    if (!caseType || !caseType.nextCase) return null
+
+    const opened = casesOpened[caseId] || 0
+    const required = caseType.requiredOpens
+    const nextCaseId = caseType.nextCase
+    const nextCaseUnlocked = unlockedCases.includes(nextCaseId)
+
+    if (nextCaseUnlocked) return null
+
+    return {
+      opened,
+      required,
+      nextCaseId,
+      progress: Math.min(1, opened / required),
+    }
+  }
+
   return (
     <div className="w-full">
       {/* Case selection */}
       {!isOpening && !showReward && (
         <div className="grid grid-cols-2 gap-3">
-          {availableCaseTypes.map((caseType) => (
-            <div
-              key={caseType.id}
-              className={cn(
-                "flex cursor-pointer flex-col items-center rounded-sm border-2 p-3 transition-all duration-300",
-                money < caseType.cost ? "opacity-50" : "hover:bg-opacity-20",
-              )}
-              style={{
-                borderColor: caseType.color,
-                boxShadow: `0 0 10px ${caseType.color}40`,
-              }}
-              onClick={() => money >= caseType.cost && openCase(caseType.id)}
-            >
-              <div className="mb-2 text-3xl">{caseType.image}</div>
-              <div className="mb-1 text-center text-sm font-bold" style={{ color: caseType.color }}>
-                {caseType.name}
-              </div>
-              <div className="mb-2 text-center text-xs opacity-70">{caseType.description}</div>
+          {availableCaseTypes.map((caseType) => {
+            const progress = getCaseProgress(caseType.id)
+
+            return (
               <div
-                className="text-center text-xs font-bold"
-                style={{ color: money >= caseType.cost ? secondaryColor : "gray" }}
+                key={caseType.id}
+                className={cn(
+                  "flex cursor-pointer flex-col items-center rounded-sm border-2 p-3 transition-all duration-300 relative",
+                  money < caseType.cost ? "opacity-50" : "hover:bg-opacity-20",
+                )}
+                style={{
+                  borderColor: caseType.color,
+                  boxShadow: `0 0 10px ${caseType.color}40`,
+                }}
+                onClick={() => money >= caseType.cost && openCase(caseType.id)}
               >
-                ¥{caseType.cost.toLocaleString()}
+                <div className="mb-2 text-3xl">{caseType.image}</div>
+                <div className="mb-1 text-center text-sm font-bold" style={{ color: caseType.color }}>
+                  {caseType.name}
+                </div>
+                <div className="mb-2 text-center text-xs opacity-70">{caseType.description}</div>
+                <div
+                  className="text-center text-xs font-bold"
+                  style={{ color: money >= caseType.cost ? secondaryColor : "gray" }}
+                >
+                  ¥{caseType.cost.toLocaleString()}
+                </div>
+
+                {/* Прогрес відкриття кейсів */}
+                {progress && (
+                  <div className="mt-2 w-full">
+                    <div className="flex justify-between text-xs mb-1">
+                      <span style={{ color: secondaryColor }}>Progress:</span>
+                      <span style={{ color: primaryColor }}>
+                        {progress.opened}/{progress.required}
+                      </span>
+                    </div>
+                    <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${progress.progress * 100}%`,
+                          backgroundColor: caseType.color,
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Інформаційна кнопка */}
+                <button
+                  className="absolute top-2 right-2 text-xs p-1 rounded-full border"
+                  style={{ borderColor: secondaryColor, color: secondaryColor }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowInfo(caseType.id)
+                  }}
+                >
+                  <Info size={14} />
+                </button>
               </div>
-            </div>
-          ))}
+            )
+          })}
 
           {/* Show locked cases as coming soon */}
           {caseTypes
             .filter((caseType) => !unlockedCases.includes(caseType.id))
-            .map((caseType) => (
-              <div
-                key={caseType.id}
-                className="flex cursor-not-allowed flex-col items-center rounded-sm border-2 border-opacity-30 p-3 opacity-50"
-                style={{
-                  borderColor: "gray",
-                }}
-              >
-                <div className="mb-2 text-3xl">?</div>
-                <div className="mb-1 text-center text-sm font-bold" style={{ color: "gray" }}>
-                  {caseType.name}
+            .map((caseType) => {
+              const prevCaseType = caseTypes.find((c) => c.nextCase === caseType.id)
+              const prevCaseOpened = prevCaseType ? casesOpened[prevCaseType.id] || 0 : 0
+              const requiredOpens = prevCaseType ? prevCaseType.requiredOpens : 0
+              const progress = prevCaseType ? Math.min(1, prevCaseOpened / requiredOpens) : 0
+
+              return (
+                <div
+                  key={caseType.id}
+                  className="flex cursor-not-allowed flex-col items-center rounded-sm border-2 border-opacity-30 p-3 opacity-50 relative"
+                  style={{
+                    borderColor: "gray",
+                  }}
+                >
+                  <div className="mb-2 text-3xl">?</div>
+                  <div className="mb-1 text-center text-sm font-bold" style={{ color: "gray" }}>
+                    {caseType.name}
+                  </div>
+                  <div className="mb-2 text-center text-xs opacity-70">Unlock by opening more cases</div>
+                  <div className="text-center text-xs font-bold" style={{ color: "gray" }}>
+                    LOCKED
+                  </div>
+
+                  {/* Прогрес розблокування */}
+                  {prevCaseType && (
+                    <div className="mt-2 w-full">
+                      <div className="flex justify-between text-xs mb-1">
+                        <span style={{ color: "gray" }}>Progress:</span>
+                        <span style={{ color: "gray" }}>
+                          {prevCaseOpened}/{requiredOpens}
+                        </span>
+                      </div>
+                      <div className="w-full h-1 bg-gray-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full"
+                          style={{
+                            width: `${progress * 100}%`,
+                            backgroundColor: "gray",
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="mb-2 text-center text-xs opacity-70">Unlock by earning more credits</div>
-                <div className="text-center text-xs font-bold" style={{ color: "gray" }}>
-                  LOCKED
-                </div>
-              </div>
-            ))}
+              )
+            })}
         </div>
       )}
 
@@ -441,7 +541,88 @@ export default function CaseSystem({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Інформаційне вікно про кейс */}
+      <AnimatePresence>
+        {showInfo && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowInfo(null)}
+          >
+            <motion.div
+              className="relative w-full max-w-md rounded-sm border-2 bg-black/90 p-6"
+              style={{
+                borderColor: caseTypes.find((c) => c.id === showInfo)?.color || primaryColor,
+                boxShadow: `0 0 20px ${caseTypes.find((c) => c.id === showInfo)?.color || primaryColor}80`,
+              }}
+              initial={{ scale: 0.8, y: 50 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.8, y: 50 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                className="absolute right-2 top-2 text-gray-400 hover:text-white"
+                onClick={() => setShowInfo(null)}
+              >
+                <X className="h-6 w-6" />
+              </button>
+
+              <div className="mb-4 text-center">
+                <div
+                  className="text-xl font-bold uppercase tracking-wider"
+                  style={{ color: caseTypes.find((c) => c.id === showInfo)?.color || primaryColor }}
+                >
+                  {caseTypes.find((c) => c.id === showInfo)?.name || "Case Info"}
+                </div>
+              </div>
+
+              <div className="mb-4 text-sm" style={{ color: secondaryColor }}>
+                {caseTypes.find((c) => c.id === showInfo)?.description || ""}
+              </div>
+
+              <div className="mb-4">
+                <div className="text-sm font-bold mb-2" style={{ color: primaryColor }}>
+                  Possible Rewards:
+                </div>
+                <div className="space-y-2">
+                  {possibleRewards[showInfo || "basic"].map((reward) => (
+                    <div key={reward.id} className="flex justify-between items-center">
+                      <div>
+                        <span className="text-sm font-medium" style={{ color: rarityColors[reward.rarity] }}>
+                          {reward.name}
+                        </span>
+                        <span className="text-xs ml-2 opacity-70" style={{ color: secondaryColor }}>
+                          ({reward.rarity})
+                        </span>
+                      </div>
+                      <div className="text-xs" style={{ color: secondaryColor }}>
+                        {reward.type}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-center">
+                <button
+                  className="rounded-sm border-2 px-6 py-2 font-bold uppercase tracking-wider transition-all duration-300"
+                  style={{
+                    borderColor: secondaryColor,
+                    color: secondaryColor,
+                    boxShadow: `0 0 10px ${secondaryColor}80`,
+                  }}
+                  onClick={() => setShowInfo(null)}
+                >
+                  Close
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
-

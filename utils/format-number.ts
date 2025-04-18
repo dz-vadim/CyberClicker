@@ -13,4 +13,3 @@ export function formatNumber(num: number): string {
 
   return `${formatted}${suffix}`
 }
-

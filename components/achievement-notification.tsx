@@ -28,4 +28,3 @@ export default function AchievementNotification({ text, primaryColor, secondaryC
     </motion.div>
   )
 }
-

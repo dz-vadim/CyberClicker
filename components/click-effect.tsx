@@ -345,4 +345,3 @@ export default function ClickEffect({ x, y, colors, effects = [] }: ClickEffectP
     </div>
   )
 }
-

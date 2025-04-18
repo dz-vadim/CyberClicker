@@ -256,4 +256,3 @@ export function applyRandomAntiEffect(
 
   return selectedEffect
 }
-

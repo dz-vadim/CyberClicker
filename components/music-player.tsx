@@ -133,4 +133,3 @@ export default function MusicPlayer({ enabled, onToggle, primaryColor, secondary
     </div>
   )
 }
-

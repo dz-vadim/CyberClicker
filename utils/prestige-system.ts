@@ -21,4 +21,3 @@ export function calculateBonusMultiplier(robocoins: number): number {
   // Each robocoin gives a 10% boost
   return 1 + robocoins * 0.1
 }
-
